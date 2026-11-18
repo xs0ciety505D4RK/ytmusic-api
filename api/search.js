@@ -3,7 +3,8 @@ import { getYtClient } from './_lib/ytmusic.js';
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
+
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { q } = req.query;
@@ -13,11 +14,11 @@ export default async function handler(req, res) {
     const yt = await getYtClient();
     const searchResults = await yt.music.search(q, { type: 'song' });
     
-    if (!searchResults.songs) {
+    if (!searchResults.songs || searchResults.songs.length === 0) {
       return res.status(404).json({ success: false, error: 'Lagu tidak ditemukan' });
     }
 
-    const songs = searchResults.songs.contents.map(item => ({
+    const songs = searchResults.songs.map(item => ({
       videoId: item.id,
       title: item.title,
       artist: item.artists?.map(a => a.name).join(', ') || 'Unknown',
@@ -26,8 +27,9 @@ export default async function handler(req, res) {
       thumbnail: item.thumbnails?.[item.thumbnails.length - 1]?.url || null,
     }));
 
-    res.status(200).json({ success: true, data: songs });
+    res.status(200).json({ success: true, total: songs.length, data: songs });
   } catch (error) {
+    console.error("Search API Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 }

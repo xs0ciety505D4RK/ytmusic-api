@@ -1,8 +1,8 @@
 import { getYtClient } from './_lib/ytmusic.js';
 import translate from 'google-translate-api-x';
 
-// Fungsi mem-parsing format LRC ke JSON
 function parseLRC(lrcString) {
+  if (!lrcString) return [];
   const lines = lrcString.split('\n');
   const lyrics = [];
   const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/;
@@ -18,7 +18,7 @@ function parseLRC(lrcString) {
       if (text) lyrics.push({ time, text });
     }
   }
-  return lyrics;
+  return lyrics.sort((a, b) => a.time - b.time);
 }
 
 export default async function handler(req, res) {
@@ -26,8 +26,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { id, translate: shouldTranslate, lang } = req.query;
-
-  if (!id) return res.status(400).json({ success: false, error: 'Parameter "id" wajib diisi' });
+  if (!id) return res.status(400).json({ success: false, error: 'ID Video wajib diisi' });
 
   try {
     const yt = await getYtClient();
@@ -37,56 +36,59 @@ export default async function handler(req, res) {
     const artist = info.basic_info.author;
     const duration = info.basic_info.duration;
 
-    // 1. Tarik data dari LRCLib (Database lirik sinkron terbesar)
-    const lrclibRes = await fetch(
+    // 1. Tarik dari LRCLib
+    let lrclibRes = await fetch(
       `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}&duration=${duration}`
     );
     
-    if (!lrclibRes.ok) {
-      // Fallback: Jika tidak ada lirik sinkron, ambil teks biasa dari YT Music
-      const ytLyrics = await yt.music.getLyrics(id);
-      if (ytLyrics && ytLyrics.description) {
-        return res.status(200).json({
-          success: true,
-          synced: false,
-          lyrics: [{ time: 0, text: ytLyrics.description.toString() }],
-          message: 'Lirik sinkron tidak ditemukan, menggunakan teks biasa.'
-        });
-      }
-      return res.status(404).json({ success: false, error: 'Lirik tidak ditemukan' });
+    let parsedLyrics = [];
+
+    if (lrclibRes.ok) {
+      const lrclibData = await lrclibRes.json();
+      parsedLyrics = parseLRC(lrclibData.syncedLyrics);
     }
 
-    const lrclibData = await lrclibRes.json();
-    let parsedLyrics = parseLRC(lrclibData.syncedLyrics || "");
+    // 2. Fallback ke YT Music jika LRCLib gagal/kosong
+    if (parsedLyrics.length === 0) {
+      try {
+        const ytLyrics = await yt.music.getLyrics(id);
+        if (ytLyrics && ytLyrics.description) {
+          // YT Music kadang ngasih plain text, kita bikin time dummy 0
+          const textLines = ytLyrics.description.toString().split('\n');
+          parsedLyrics = textLines.map(text => ({ time: 0, text: text.trim() })).filter(l => l.text);
+        }
+      } catch (e) {
+        console.error("YT Lyrics Fallback Error:", e.message);
+      }
+    }
 
-    // 2. Fitur Translate (On/Off via parameter)
+    if (parsedLyrics.length === 0) {
+      return res.status(404).json({ success: false, error: 'Lirik tidak ditemukan di database manapun.' });
+    }
+
+    // 3. Proses Translate
     if (shouldTranslate === 'true' && lang) {
-      // Translate semua baris secara paralel agar cepat
       const translationPromises = parsedLyrics.map(async (line) => {
         try {
-          const res = await translate(line.text, { to: lang });
-          return { 
-            ...line, 
-            text: res.text, 
-            originalText: line.text 
-          };
+          const result = await translate(line.text, { to: lang });
+          return { ...line, text: result.text, originalText: line.text };
         } catch (e) {
-          return line; // Jika gagal translate 1 baris, kembalikan teks asli
+          return line; // Return teks asli jika gagal translate
         }
       });
-      
       parsedLyrics = await Promise.all(translationPromises);
     }
 
     res.status(200).json({
       success: true,
-      synced: true,
+      synced: parsedLyrics.length > 1,
       translated: shouldTranslate === 'true',
       language: lang || 'original',
       lyrics: parsedLyrics
     });
 
   } catch (error) {
+    console.error("Lyrics API Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 }
