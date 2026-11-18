@@ -6,10 +6,8 @@ export async function getYtClient() {
   try {
     if (cachedClient) return cachedClient;
     
-    // Gunakan ANDROID_VR karena paling stabil dan tanpa PoToken
     const yt = await Innertube.create({
-      client_type: 'ANDROID_VR',
-      retrieve_player: true,
+      client_type: 'WEB_CREATOR', // Client yang lebih tahan blokir
       generate_session_locally: true
     });
     
