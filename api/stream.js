@@ -10,30 +10,19 @@ export default async function handler(req, res) {
   try {
     const yt = await getYtClient();
     
-    // 1. Ambil info dasar dulu untuk efisiensi
-    const info = await yt.getBasicInfo(id, { client: 'WEB_CREATOR' }); // Ganti client ke WEB_CREATOR
+    // Panggil getInfo tanpa opsi tambahan (biar nggak error toUpperCase)
+    const info = await yt.getInfo(id);
     
-    // 2. Cek status playability (apakah video bisa diputar?)
-    if (info.playability_status?.status !== 'OK') {
-      throw new Error(`Video tidak dapat diputar: ${info.playability_status?.reason || 'Unknown reason'}`);
-    }
-
-    // 3. Pastikan streaming_data ada
     if (!info.streaming_data) {
       throw new Error('Streaming data tidak tersedia dari YouTube.');
     }
 
-    // 4. Cari format audio di adaptive_formats
-    const audioFormat = info.streaming_data.adaptive_formats.find(
-      (format) => format.mime_type.includes('audio')
-    );
+    // Pilih format audio
+    const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+    if (!format) throw new Error('Format audio tidak ditemukan.');
 
-    if (!audioFormat) {
-      throw new Error('Format audio tidak ditemukan.');
-    }
-
-    // 5. Dekripsi URL dan stream
-    const streamUrl = audioFormat.decipher(yt.session.player);
+    // Dekripsi URL
+    const streamUrl = format.decipher(yt.session.player);
 
     const response = await fetch(streamUrl, {
       headers: {
@@ -46,12 +35,14 @@ export default async function handler(req, res) {
       throw new Error(`YouTube Error: ${response.status} ${response.statusText}`);
     }
 
+    // Teruskan header ke browser
     res.status(response.status);
-    res.setHeader('Content-Type', audioFormat.mime_type || 'audio/webm');
+    res.setHeader('Content-Type', format.mime_type || 'audio/webm');
     if (response.headers.get('content-range')) res.setHeader('Content-Range', response.headers.get('content-range'));
     if (response.headers.get('content-length')) res.setHeader('Content-Length', response.headers.get('content-length'));
     res.setHeader('Accept-Ranges', 'bytes');
 
+    // Stream data ke frontend
     const reader = response.body.getReader();
     const pump = async () => {
       const { done, value } = await reader.read();
