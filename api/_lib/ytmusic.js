@@ -6,10 +6,9 @@ export async function getYtClient() {
   try {
     if (cachedClient) return cachedClient;
     
-    // Ganti client ke WEB_REMIX yang lebih stabil untuk streaming musik
+    // Paksa pakai client WEB yang paling stabil
     const yt = await Innertube.create({
-      client_type: 'WEB_REMIX',
-      retrieve_player: true,
+      client_type: 'WEB',
       generate_session_locally: true
     });
     
