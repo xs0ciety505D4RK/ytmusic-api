@@ -15,22 +15,24 @@ export default async function handler(req, res) {
     const format = info.chooseFormat({ type: 'audio', quality: 'best' });
     if (!format) throw new Error('Format audio tidak tersedia');
 
-    // Decrypt URL menggunakan player
+    // Dekripsi URL audio
     const streamUrl = format.decipher(yt.session.player);
 
     // Ambil data stream dari URL YouTube
     const response = await fetch(streamUrl, {
       headers: {
+        // Wajib pakai Range untuk streaming audio
         'Range': req.headers.range || 'bytes=0-',
-        'User-Agent': 'Mozilla/5.0'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
 
+    // Cek apakah YouTube ngasih error 403/404
     if (!response.ok) {
       throw new Error(`YouTube Error: ${response.status} ${response.statusText}`);
     }
 
-    // Teruskan header status dan Content-Range agar bisa di-seek
+    // Teruskan header ke browser
     res.status(response.status);
     res.setHeader('Content-Type', format.mime_type || 'audio/webm');
     
