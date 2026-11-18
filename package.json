@@ -1,0 +1,10 @@
+{
+  "name": "ytmusic-api",
+  "version": "1.0.0",
+  "description": "YouTube Music API with Synced Lyrics & Translation",
+  "type": "module",
+  "dependencies": {
+    "youtubei.js": "^10.3.0",
+    "google-translate-api-x": "^10.6.3"
+  }
+}
