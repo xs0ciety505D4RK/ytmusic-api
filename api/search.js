@@ -14,11 +14,13 @@ export default async function handler(req, res) {
     const yt = await getYtClient();
     const searchResults = await yt.music.search(q, { type: 'song' });
     
-    if (!searchResults.songs || searchResults.songs.length === 0) {
+    // Pastikan searchResults.songs dan searchResults.songs.contents ada
+    if (!searchResults.songs || !searchResults.songs.contents) {
       return res.status(404).json({ success: false, error: 'Lagu tidak ditemukan' });
     }
 
-    const songs = searchResults.songs.map(item => ({
+    // FIX: Akses array melalui .contents
+    const songs = searchResults.songs.contents.map(item => ({
       videoId: item.id,
       title: item.title,
       artist: item.artists?.map(a => a.name).join(', ') || 'Unknown',
