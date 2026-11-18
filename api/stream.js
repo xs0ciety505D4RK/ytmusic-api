@@ -9,19 +9,19 @@ export default async function handler(req, res) {
 
   try {
     const yt = await getYtClient();
-    
-    // Panggil getInfo tanpa opsi tambahan (biar nggak error toUpperCase)
     const info = await yt.getInfo(id);
     
     if (!info.streaming_data) {
-      throw new Error('Streaming data tidak tersedia dari YouTube.');
+      throw new Error('Streaming data tidak tersedia. IP Vercel diblokir YouTube.');
     }
 
-    // Pilih format audio
-    const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+    // Cari format audio di adaptive_formats
+    const format = info.streaming_data.adaptive_formats.find(
+      (f) => f.mime_type.includes('audio')
+    );
+
     if (!format) throw new Error('Format audio tidak ditemukan.');
 
-    // Dekripsi URL
     const streamUrl = format.decipher(yt.session.player);
 
     const response = await fetch(streamUrl, {
@@ -32,17 +32,15 @@ export default async function handler(req, res) {
     });
 
     if (!response.ok) {
-      throw new Error(`YouTube Error: ${response.status} ${response.statusText}`);
+      throw new Error(`YouTube Error: ${response.status}`);
     }
 
-    // Teruskan header ke browser
     res.status(response.status);
     res.setHeader('Content-Type', format.mime_type || 'audio/webm');
     if (response.headers.get('content-range')) res.setHeader('Content-Range', response.headers.get('content-range'));
     if (response.headers.get('content-length')) res.setHeader('Content-Length', response.headers.get('content-length'));
     res.setHeader('Accept-Ranges', 'bytes');
 
-    // Stream data ke frontend
     const reader = response.body.getReader();
     const pump = async () => {
       const { done, value } = await reader.read();
@@ -53,7 +51,7 @@ export default async function handler(req, res) {
     await pump();
 
   } catch (error) {
-    console.error("Stream Proxy Error:", error.message);
+    console.error("Stream Error:", error.message);
     if (!res.headersSent) res.status(500).json({ success: false, error: error.message });
     else res.end();
   }
