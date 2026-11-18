@@ -1,12 +1,13 @@
 {
-  "name": "ytmusic-api",
+  "name": "ytmusic-api-pro",
   "version": "1.0.0",
+  "description": "Robust YTMusic API for Vercel",
   "type": "module",
   "engines": {
-    "node": ">=22.0.0"
+    "node": "22.x"
   },
   "dependencies": {
-    "youtubei.js": "^10.3.0",
+    "youtubei.js": "^12.0.0",
     "google-translate-api-x": "^10.6.3"
   }
 }
